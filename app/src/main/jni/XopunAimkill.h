@@ -978,7 +978,7 @@ int delayLimit2    = 0;      // Secondary delay (unused)
 // Lower = faster but more detection risk
 // Higher = slower but safer and more real damages
 // 25 frames @ 60fps = ~416ms between shots (realistic rate)
-int DamageDelay    = 25;     // Frames between damages - SAFE & LEGIT (no detection)
+int DamageDelay    = 7;     // Frames between damages - SAFE & LEGIT (no detection)
 
 bool AimKill1;
 
