@@ -629,14 +629,17 @@ if (closestEnemy != NULL && LocalPlayer != NULL && CurrentMatch != NULL) {
                
                
                if (AimKill1) {
-         if (damageCooldown <= 0) {
-              StartTakeDamage(closestEnemy);
-              StartonFiring(LocalPlayer, WeaponHand);
-             damageCooldown = DamageDelay;
-                } else {
-            damageCooldown--;
-            }
-          }
+                   // Aimkill works automatically without needing to fire
+                   // Slower timing (25 frames = ~416ms) prevents detection
+                   if (damageCooldown <= 0) {
+                       // Send real damage using game function (not raw packets)
+                       StartTakeDamage(closestEnemy);
+                       StartonFiring(LocalPlayer, WeaponHand);
+                       damageCooldown = DamageDelay;  // Reset cooldown (25 frames = ~416ms)
+                   } else {
+                       damageCooldown--;  // Count down each frame
+                   }
+               }
           
            }
            
