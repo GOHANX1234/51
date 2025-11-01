@@ -192,6 +192,9 @@ struct GCommon_TimeService_o {
 #define offset_StartFiring (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("COW.GamePlay"), OBFUSCATE("PlayerNetwork"), OBFUSCATE("StartFiring"), 1)
 #define offset_StopFire (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("COW.GamePlay"), OBFUSCATE("PlayerNetwork"), OBFUSCATE("StopFire"), 1)
 #define offset_StartWholeBodyFiring (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("COW.GamePlay"), OBFUSCATE("PlayerNetwork"), OBFUSCATE("StartWholeBodyFiring"), 1)
+#define offset_WeaponFireComponent (uintptr_t) Il2CppGetFieldOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("COW.GamePlay"), OBFUSCATE("Weapon"), OBFUSCATE("FireComponent"))
+#define offset_WeaponFire (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("COW.GamePlay"), OBFUSCATE("WeaponFireComponent"), OBFUSCATE("Fire"), 0)
+#define offset_WeaponDoFire (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("COW.GamePlay"), OBFUSCATE("Weapon"), OBFUSCATE("DoFire"), 0)
 #define offset_get_realtimeSinceStartup (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("UnityEngine.CoreModule.dll"), OBFUSCATE("UnityEngine"), OBFUSCATE("Time"), OBFUSCATE("get_realtimeSinceStartup"), 0)
 #define offset_SimulationTimer (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("COW"), OBFUSCATE("GameFacade"), OBFUSCATE("CurrentGameSimulationTimer"), 0)
 #define offset_DPPPFBHIHJA (uintptr_t) Il2CppGetMethodOffset(OBFUSCATE("Assembly-CSharp.dll"), OBFUSCATE("ffantihack"), OBFUSCATE("DCKLGOGDPCH"), OBFUSCATE("DPPPFBHIHJA"), 0)
@@ -448,10 +451,9 @@ inline void write_uint32(void* base, size_t offset, uint32_t value) {
     *p = value;
 }
 
-// Aimkill timing constants - optimized for smooth operation
-static const int AIMKILL_DAMAGE_INTERVAL = 90;  // ms between damage packets
-static const int BURST_FIRE_DURATION = 1000;    // ms for each burst
-static const int BURST_COOLDOWN = 500;          // ms between bursts
+// Aimkill timing constants - FAST CONTINUOUS REAL FIRING with ammo consumption
+static const int AIMKILL_FIRE_RATE = 25;  // ms between shots - VERY FAST (40 shots/sec)
+static const int AIMKILL_DAMAGE_RATE = 30;  // ms between damage packets
 
 void StartTakeDamage(void* ClosestEnemy) {
     if (ClosestEnemy == nullptr || !Aimbot) return;
@@ -462,6 +464,12 @@ void StartTakeDamage(void* ClosestEnemy) {
     void* LocalPlayer = GetLocalPlayer(trandau);
     if (!LocalPlayer) return;
 
+    void* WeaponHand = GetWeaponOnHand1(LocalPlayer);
+    if (!WeaponHand) return;
+
+    void* fireComponent = *(void**)((uintptr_t)WeaponHand + offset_WeaponFireComponent);
+    if (!fireComponent) return;
+
     auto damagePacket = (message_C2S_RUDP_TakeDamage_Req_o2*)((void* (*)(void*))offset_PNGAJBCPDNJ)(LocalPlayer);
     if (!damagePacket) return;
 
@@ -470,9 +478,6 @@ void StartTakeDamage(void* ClosestEnemy) {
 
     auto DamageInfo = (DamageInfo2_o*)((void* (*)(void*))(BNJIPPIIMDF1616))(Class_message_DamageInfo_c);
     if (!DamageInfo) return;
-
-    void* WeaponHand = GetWeaponOnHand1(LocalPlayer);
-    if (!WeaponHand) return;
 
     PlayerID PlayerID2 = *(PlayerID*)((uintptr_t)LocalPlayer + offset_KFMGKCJMCAM);
     PlayerID playerID_Enemy = *(PlayerID*)((uintptr_t)ClosestEnemy + offset_KFMGKCJMCAM);
@@ -513,47 +518,42 @@ void StartTakeDamage(void* ClosestEnemy) {
     GCommon_TimeService_o* GameSimulation = (GCommon_TimeService_o*)CurrentGameSimulationTimer();
     if (!GameSimulation || !paramCheck) return;
 
-    static auto burstStartTime = std::chrono::steady_clock::now();
+    static auto lastFireTime = std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
     static auto lastDamageTime = std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
-    static bool isFiring = false;
+    static bool isCurrentlyFiring = false;
 
     if (isEnemyInRangeWeapon(LocalPlayer, ClosestEnemy, WeaponHand)) {
         auto now = std::chrono::steady_clock::now();
-        auto burstElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - burstStartTime).count();
+        auto fireElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFireTime).count();
         auto damageElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDamageTime).count();
 
-        if (!isFiring) {
-            if (burstElapsed >= BURST_COOLDOWN) {
-                isFiring = true;
-                burstStartTime = now;
-            }
-        } else {
-            if (burstElapsed >= BURST_FIRE_DURATION) {
-                isFiring = false;
-                burstStartTime = now;
-                StopFire1(LocalPlayer, WeaponHand);
-            } else {
-                if (damageElapsed >= AIMKILL_DAMAGE_INTERVAL) {
-                    Vector3 firePos = GetHeadPosition(LocalPlayer);
-                    Vector3 hitPos = GetHeadPosition(ClosestEnemy);
+        if (!isCurrentlyFiring) {
+            StartFiring(LocalPlayer, WeaponHand);
+            StartWholeBodyFiring(LocalPlayer, WeaponHand);
+            isCurrentlyFiring = true;
+        }
 
-                    TakeDamage(ClosestEnemy, baseDamage, PlayerID2,
-                               (DamageInfo2_o*)Save::DamageInfo, weaponID,
-                               firePos, hitPos, paramCheck, nullptr, 0);
+        if (fireElapsed >= AIMKILL_FIRE_RATE) {
+            ((void (*)(void*))offset_WeaponFire)(fireComponent);
+            lastFireTime = now;
+        }
 
-                    StartFiring(LocalPlayer, WeaponHand);
-                    StartWholeBodyFiring(LocalPlayer, WeaponHand);
+        if (damageElapsed >= AIMKILL_DAMAGE_RATE) {
+            Vector3 firePos = GetHeadPosition(LocalPlayer);
+            Vector3 hitPos = GetHeadPosition(ClosestEnemy);
 
-                    lastDamageTime = now;
-                }
-            }
+            TakeDamage(ClosestEnemy, baseDamage, PlayerID2,
+                       (DamageInfo2_o*)Save::DamageInfo, weaponID,
+                       firePos, hitPos, paramCheck, nullptr, 0);
+
+            lastDamageTime = now;
         }
     } else {
-        if (isFiring) {
+        if (isCurrentlyFiring) {
             StopFire1(LocalPlayer, WeaponHand);
-            isFiring = false;
+            isCurrentlyFiring = false;
         }
-        burstStartTime = std::chrono::steady_clock::now();
+        lastFireTime = std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
         lastDamageTime = std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
     }
 }
