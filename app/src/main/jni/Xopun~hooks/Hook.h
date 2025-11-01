@@ -622,22 +622,45 @@ if (closestEnemy != NULL && LocalPlayer != NULL && CurrentMatch != NULL) {
     
     void *WeaponHand = GetWeaponOnHand1(Current_Local_Player());
          
+           // FIXED: State management for visible firing - prevents crash
+           static bool isAimkillActive = false;
+           static void* lastTargetEnemy = nullptr;
 
            if (WeaponHand) {
             
-
-               
-               
-               if (AimKill1) {
-                   // Aimkill works automatically without needing to fire
+               if (AimKill1 && closestEnemy && isEnemyInRangeWeapon(LocalPlayer, closestEnemy, WeaponHand)) {
+                   // Aimkill works automatically when enemy in range
                    // Slower timing (25 frames = ~416ms) prevents detection
                    if (damageCooldown <= 0) {
                        // Send real damage using game function (not raw packets)
                        StartTakeDamage(closestEnemy);
-                       StartonFiring(LocalPlayer, WeaponHand);
+                       
+                       // FIXED: Only start firing if not already firing or switched target
+                       if (!isAimkillActive) {
+                           // First time activating
+                           StartFiring(LocalPlayer, WeaponHand);
+                           StartWholeBodyFiring(LocalPlayer, WeaponHand);
+                           isAimkillActive = true;
+                           lastTargetEnemy = closestEnemy;
+                       } else if (lastTargetEnemy != closestEnemy) {
+                           // Switched target - stop old, start new
+                           StopFire1(LocalPlayer, WeaponHand);
+                           StartFiring(LocalPlayer, WeaponHand);
+                           StartWholeBodyFiring(LocalPlayer, WeaponHand);
+                           lastTargetEnemy = closestEnemy;
+                       }
+                       
                        damageCooldown = DamageDelay;  // Reset cooldown (25 frames = ~416ms)
                    } else {
                        damageCooldown--;  // Count down each frame
+                   }
+               } else {
+                   // FIXED: Stop firing when aimkill disabled OR enemy out of range OR no enemy
+                   if (isAimkillActive) {
+                       StopFire1(LocalPlayer, WeaponHand);
+                       isAimkillActive = false;
+                       lastTargetEnemy = nullptr;
+                       damageCooldown = 0;  // Reset cooldown for clean state
                    }
                }
           
