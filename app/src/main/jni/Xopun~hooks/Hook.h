@@ -588,10 +588,8 @@ void (*LateUpdate)(void *Player, void *param);
 void _LateUpdate(void *Player, void *param){
         
 int totalEnemies = 0; 
-                
+
 if (Player != NULL) {
-
-
 
 if (Aimbot) {
 
