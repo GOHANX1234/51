@@ -443,7 +443,7 @@ inline EGLBoolean hook_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
     
     if (show_menu) {
         ImGui::SetNextWindowSize(ImVec2(620, 410), ImGuiCond_Once);
-        ImGui::Begin(OBFUSCATE("DEXXTER MOD APK V2"), &show_menu, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
+        ImGui::Begin(OBFUSCATE("DEXXTER MOD APK V2.1"), &show_menu, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
         
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 pos = ImGui::GetWindowPos();
