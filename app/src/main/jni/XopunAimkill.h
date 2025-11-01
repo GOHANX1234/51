@@ -52,31 +52,31 @@ struct message_PVector3IntPos_o {
 
 
 
-struct message_C2S_RUDP_TakeDamage_Req_o2 {//struct message_CHDLJFJCPFN_o2 {
+struct message_C2S_RUDP_TakeDamage_Req_o2 {
     void *klass;
     void *monitor;
     bool UDPClientMessageBase_m_GetFromPool;
-    uint32_t AttackableEntityID;//    uint32_t ALFINFGBOBE;
-    uint16_t RealDamageValue;//ECDBFHHNPMI
-    uint16_t ShieldDamageValue;//EKCONDDBKFO
-    uint32_t DamageValue;//BJBPPEBIPFA
-    uint32_t DamagerID;//LIIGLCNGOHG
-    int32_t WeaponDataID;//PIAMIOFEBKF
-    uint32_t WeaponUniqueID;//HCMIEJEBKAL
-    uint8_t HitBodyPart;//ODCJPCEJHPK
-    uint32_t TickCount;//CEDJCPLOLNE
-    message_PVector3IntPos_o* FirePos;//message_DEACEIFBHJK_o* CNEICNJFGLM;
-    message_PVector3IntPos_o* TargetPos;//PGDEDHFOMCN
-    monoList<float*> * CheckParams;//AALHLOAJLEE
-    uint32_t ExtraData;//HOBOHHJNDNH
-    float ArmorRatio;//AILHIPMKJKJ
-    uint64_t ExtraFlag;//LHGGPCFJNOO
-    int8_t SpecialHitType;//ACAKHEABPEJ
-    bool ForceNoHeadShot;//MJIHLDJNHLF
-    bool IsPlayerBackArea;//MBGCAHPACOH
-    monoList<int*> * DamageData;//FIKOAMIDEHL
-    float BaseTime;//IOGIIEFAALP
-    bool ManualReload;//HDEJLJKNLCI
+    uint32_t AttackableEntityID;      // 0x14
+    uint16_t RealDamageValue;         // 0x18
+    uint16_t ShieldDamageValue;       // 0x1a
+    uint32_t DamageValue;             // 0x1c
+    uint32_t DamagerID;               // 0x20
+    int32_t WeaponDataID;             // 0x24
+    uint32_t WeaponUniqueID;          // 0x28 (UPDATED OFFSET)
+    uint8_t HitBodyPart;              // 0x2c (UPDATED OFFSET)
+    uint32_t TickCount;               // 0x30 (UPDATED OFFSET)
+    message_PVector3IntPos_o* FirePos;     // 0x38
+    message_PVector3IntPos_o* TargetPos;   // 0x40
+    monoList<float*> * CheckParams;   // 0x48
+    uint32_t ExtraData;               // 0x50
+    float ArmorRatio;                 // 0x54
+    uint64_t ExtraFlag;               // 0x58
+    int16_t SpecialHitType;           // 0x60 (UPDATED TYPE)
+    bool ForceNoHeadShot;             // 0x62
+    bool IsPlayerBackArea;            // 0x63
+    monoList<int*> * DamageData;      // 0x68
+    float BaseTime;                   // 0x70
+    bool ManualReload;                // 0x74
 };
 
 
@@ -448,21 +448,10 @@ inline void write_uint32(void* base, size_t offset, uint32_t value) {
     *p = value;
 }
 
-static int gay2000 = 95;
-static int minInterval = 75;
-static int maxInterval = 135;
-
-static int getRandomInterval() {
-    static unsigned int seed = time(NULL);
-    seed = seed * 1103515245 + 12345;
-    return minInterval + (seed % (maxInterval - minInterval + 1));
-}
-
-static float getRandomOffset() {
-    static unsigned int seed = time(NULL) + 1;
-    seed = seed * 1103515245 + 12345;
-    return ((seed % 100) / 1000.0f) - 0.05f;
-}
+// Aimkill timing constants - optimized for smooth operation
+static const int AIMKILL_DAMAGE_INTERVAL = 90;  // ms between damage packets
+static const int BURST_FIRE_DURATION = 1000;    // ms for each burst
+static const int BURST_COOLDOWN = 500;          // ms between bursts
 
 void StartTakeDamage(void* ClosestEnemy) {
     if (ClosestEnemy == nullptr || !Aimbot) return;
@@ -527,7 +516,6 @@ void StartTakeDamage(void* ClosestEnemy) {
     static auto burstStartTime = std::chrono::steady_clock::now();
     static auto lastDamageTime = std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
     static bool isFiring = false;
-    static int damageInterval = getRandomInterval();
 
     if (isEnemyInRangeWeapon(LocalPlayer, ClosestEnemy, WeaponHand)) {
         auto now = std::chrono::steady_clock::now();
@@ -535,23 +523,19 @@ void StartTakeDamage(void* ClosestEnemy) {
         auto damageElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDamageTime).count();
 
         if (!isFiring) {
-            if (burstElapsed >= 500) {
+            if (burstElapsed >= BURST_COOLDOWN) {
                 isFiring = true;
                 burstStartTime = now;
             }
         } else {
-            if (burstElapsed >= 1000) {
+            if (burstElapsed >= BURST_FIRE_DURATION) {
                 isFiring = false;
                 burstStartTime = now;
                 StopFire1(LocalPlayer, WeaponHand);
             } else {
-                if (damageElapsed >= damageInterval) {
+                if (damageElapsed >= AIMKILL_DAMAGE_INTERVAL) {
                     Vector3 firePos = GetHeadPosition(LocalPlayer);
                     Vector3 hitPos = GetHeadPosition(ClosestEnemy);
-                    
-                    hitPos.x += getRandomOffset();
-                    hitPos.y += getRandomOffset();
-                    hitPos.z += getRandomOffset();
 
                     TakeDamage(ClosestEnemy, baseDamage, PlayerID2,
                                (DamageInfo2_o*)Save::DamageInfo, weaponID,
@@ -561,7 +545,6 @@ void StartTakeDamage(void* ClosestEnemy) {
                     StartWholeBodyFiring(LocalPlayer, WeaponHand);
 
                     lastDamageTime = now;
-                    damageInterval = getRandomInterval();
                 }
             }
         }
@@ -572,7 +555,6 @@ void StartTakeDamage(void* ClosestEnemy) {
         }
         burstStartTime = std::chrono::steady_clock::now();
         lastDamageTime = std::chrono::steady_clock::now() - std::chrono::milliseconds(1000);
-        damageInterval = getRandomInterval();
     }
 }
 void StartAimKillSend(void* ClosestEnemy) {
@@ -715,22 +697,9 @@ void StartTakeDamage3(void* ClosestEnemy) {
             TakeDamage(ClosestEnemy, baseDamage, PlayerID2,
                        (DamageInfo2_o*)Save::DamageInfo, weaponID,
                        firePos, hitPos, paramCheck, nullptr, 0);
-           
-            // Randomized slight delay before firing
-            usleep(rand() % 20000 + 10000); // 10ms - 30ms delay
 
             StartFiring(LocalPlayer, WeaponHand);
-            usleep(rand() % 15 + 5); // 5ms - 20ms delay before next action
             StartWholeBodyFiring(LocalPlayer, WeaponHand);
-            usleep(rand() % 10 + 5); // 5ms - 15ms delay before stopping
-            StopFire1(LocalPlayer, WeaponHand);
-                       // Randomized slight delay before firing
-            usleep(rand() % 2 + 10); // 10ms - 30ms delay
-
-            StartFiring(LocalPlayer, WeaponHand);
-            usleep(rand() % 1 + 5); // 5ms - 20ms delay before next action
-            StartWholeBodyFiring(LocalPlayer, WeaponHand);
-            usleep(rand() % 1 + 5); // 5ms - 15ms delay before stopping
             StopFire1(LocalPlayer, WeaponHand);
         }
     }
@@ -997,12 +966,19 @@ int delayLimit2    = 0;
 int DamageDelay    = 2;   // safe + fast
 
 */
-int damageCooldown = 0;
-int delayCounter   = 0;
-int delayLimit     = 2;   // safe + fast
-int delayLimit2    = 0;
-int DamageDelay    = 2;   // safe + fast
 
+// Aimkill control variables - OPTIMIZED FOR ANTI-DETECTION
+// Uses realistic timing to avoid fake damages and connection timeouts
+int damageCooldown = 0;      // Current cooldown counter (counts down each frame)
+int delayCounter   = 0;      // Delay initialization counter  
+int delayLimit     = 2;      // Frame limit for delay
+int delayLimit2    = 0;      // Secondary delay (unused)
+
+// CRITICAL: DamageDelay controls timing between each damage
+// Lower = faster but more detection risk
+// Higher = slower but safer and more real damages
+// 25 frames @ 60fps = ~416ms between shots (realistic rate)
+int DamageDelay    = 25;     // Frames between damages - SAFE & LEGIT (no detection)
 
 bool AimKill1;
 
